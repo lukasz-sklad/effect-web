@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="color-scheme" content="dark light">
+  <title>EffectCraft Web — Animacja Komputerowa i Efekty Wizualne</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-256.png">
+  <script>
+    // Natychmiastowa synchronizacja motywu przed pobraniem WASM (brak błysku)
+    (() => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const themeParam = params.get("theme") || localStorage.getItem("craft_theme");
+        if (themeParam === "light" || themeParam === "jasny") {
+          document.documentElement.classList.add("theme-light");
+        } else if (themeParam === "sepia") {
+          document.documentElement.classList.add("theme-sepia");
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <style>
+    :root {
+      --bg-page: #18181b;
+      --bg-card: #232328;
+      --border-card: #35353d;
+      --text-title: #ffffff;
+      --text-sub: #9e9e9e;
+      --text-status: #d1d5db;
+      --bg-progress: #151518;
+      --border-progress: #303038;
+      --grad-progress: linear-gradient(90deg, #3b82f6, #60a5fa);
+      --bg-badge: rgba(255, 255, 255, 0.05);
+      --border-badge: rgba(255, 255, 255, 0.12);
+      --btn-active-bg: #2563eb;
+      --btn-active-text: #ffffff;
+      --btn-inactive-bg: rgba(255, 255, 255, 0.07);
+      --btn-inactive-text: #a1a1aa;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-page: #f4f4f5;
+        --bg-card: #ffffff;
+        --border-card: #e4e4e7;
+        --text-title: #18181b;
+        --text-sub: #71717a;
+        --text-status: #3f3f46;
+        --bg-progress: #f1f1f3;
+        --border-progress: #e4e4e7;
+        --grad-progress: linear-gradient(90deg, #2563eb, #3b82f6);
+        --bg-badge: rgba(0, 0, 0, 0.04);
+        --border-badge: rgba(0, 0, 0, 0.08);
+        --btn-active-bg: #2563eb;
+        --btn-active-text: #ffffff;
+        --btn-inactive-bg: rgba(0, 0, 0, 0.05);
+        --btn-inactive-text: #52525b;
+      }
+    }
+    html.theme-light, body.theme-light {
+      --bg-page: #f4f4f5;
+      --bg-card: #ffffff;
+      --border-card: #e4e4e7;
+      --text-title: #18181b;
+      --text-sub: #71717a;
+      --text-status: #3f3f46;
+      --bg-progress: #f1f1f3;
+      --border-progress: #e4e4e7;
+      --grad-progress: linear-gradient(90deg, #2563eb, #3b82f6);
+      --bg-badge: rgba(0, 0, 0, 0.04);
+      --border-badge: rgba(0, 0, 0, 0.08);
+      --btn-active-bg: #2563eb;
+      --btn-active-text: #ffffff;
+      --btn-inactive-bg: rgba(0, 0, 0, 0.05);
+      --btn-inactive-text: #52525b;
+    }
+    html.theme-sepia, body.theme-sepia {
+      --bg-page: #f3ead8;
+      --bg-card: #fdfaf3;
+      --border-card: #e2d5be;
+      --text-title: #3d3224;
+      --text-sub: #7c6f5d;
+      --text-status: #5c4f3d;
+      --bg-progress: #ebdcc4;
+      --border-progress: #ded0b9;
+      --grad-progress: linear-gradient(90deg, #d97706, #f59e0b);
+      --bg-badge: rgba(61, 50, 36, 0.06);
+      --border-badge: rgba(61, 50, 36, 0.14);
+      --btn-active-bg: #d97706;
+      --btn-active-text: #ffffff;
+      --btn-inactive-bg: rgba(61, 50, 36, 0.06);
+      --btn-inactive-text: #7c6f5d;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-page);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text-status);
+      transition: background 0.15s ease-out;
+    }
+    #effectcraft_canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      outline: none;
+    }
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-page);
+      z-index: 100;
+      padding: 24px;
+      text-align: center;
+      user-select: none;
+      transition: opacity 0.22s ease-out;
+    }
+    .loading-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 14px;
+      padding: 32px 28px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .app-icon {
+      width: 62px;
+      height: 62px;
+      margin-bottom: 2px;
+    }
+    .app-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-title);
+      margin: 0;
+      letter-spacing: -0.3px;
+    }
+    .app-subtitle {
+      font-size: 13px;
+      color: var(--text-sub);
+      margin: 0;
+    }
+    .engine-selector {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border-badge);
+      background: var(--bg-badge);
+      font-size: 11px;
+      margin: 4px 0;
+    }
+    .engine-label {
+      color: var(--text-sub);
+      font-weight: 500;
+      padding-left: 4px;
+    }
+    .engine-btn {
+      padding: 3px 9px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 11px;
+      background: var(--btn-inactive-bg);
+      color: var(--btn-inactive-text);
+      transition: all 0.15s ease-out;
+    }
+    .engine-btn.active {
+      background: var(--btn-active-bg);
+      color: var(--btn-active-text);
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+    }
+    .status-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-status);
+      min-height: 20px;
+    }
+    .progress-container {
+      width: 100%;
+      background: var(--bg-progress);
+      border-radius: 8px;
+      height: 8px;
+      overflow: hidden;
+      position: relative;
+      margin: 4px 0 2px;
+      border: 1px solid var(--border-progress);
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--grad-progress);
+      border-radius: 8px;
+      transition: width 0.15s ease-out;
+    }
+    .progress-info {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-sub);
+      font-variant-numeric: tabular-nums;
+    }
+    .err-box {
+      display: none;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #ef4444;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      text-align: left;
+      width: 100%;
+      line-height: 1.4;
+      margin: 6px 0 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      pointer-events: auto;
+    }
+    .err-box a {
+      color: #3b82f6;
+      font-weight: 600;
+    }
+    #device-lost {
+      position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px;
+      align-items: center; justify-content: center; padding: 16px; text-align: center;
+      background: rgb(18 18 18 / 0.85); color: #c8c8c8; font: 14px/1.4 system-ui, sans-serif;
+      z-index: 200;
+    }
+    #device-lost strong { color: #e3e3e3; font-size: 16px; }
+    #device-lost p { margin: 0; max-width: 60ch; }
+    #device-lost small { color: #8c8c8c; font-size: 12px; }
+    #device-lost div { display: flex; gap: 8px; }
+    #device-lost button {
+      padding: 6px 14px; border: 1px solid #3a3a3a; border-radius: 4px;
+      background: #232323; color: #e3e3e3; font: inherit; cursor: pointer;
+    }
+    #device-lost button:hover { background: #303030; }
+    #device-lost button:last-child { background: #2d8ceb; border-color: #2d8ceb; }
+    #device-lost button:last-child:hover { background: #4aa0f5; }
+    #device-lost button:disabled { opacity: 0.6; cursor: default; }
+  </style>
+</head>
+<body>
+  <canvas id="effectcraft_canvas"></canvas>
+
+  <div id="loading">
+    <div class="loading-card">
+      <img src="favicon.svg" alt="EffectCraft" class="app-icon">
+      <h1 class="app-title">EffectCraft Web</h1>
+      <p class="app-subtitle">Kompozycje &bull; Efekty Wizualne &bull; Render Queue</p>
+
+      <div class="engine-selector">
+        <span class="engine-label">Akceleracja GPU:</span>
+        <a href="?backend=webgpu" class="engine-btn" id="btn_webgpu" title="WebGPU (zalecane dla nowoczesnych przeglądarek)">⚡ WebGPU</a>
+        <a href="?webgl=1" class="engine-btn" id="btn_webgl" title="Tryb zgodności WebGL2">⚙ WebGL2</a>
+      </div>
+
+      <div class="status-text" id="status_text">Inicjalizacja EffectCraft…</div>
+
+      <div class="progress-container">
+        <div class="progress-bar" id="progress_bar"></div>
+      </div>
+
+      <div class="progress-info">
+        <span id="progress_bytes">Pobieranie WebAssembly…</span>
+        <span id="progress_pct">0%</span>
+      </div>
+
+      <div class="err-box" id="error_box"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import init, * as ec from "./effectcraft_web.js";
+
+    const t0 = performance.now();
+    window.effectcraftLoad = {};
+
+    const statusEl = document.getElementById("status_text");
+    const progressBar = document.getElementById("progress_bar");
+    const progressBytes = document.getElementById("progress_bytes");
+    const progressPct = document.getElementById("progress_pct");
+    const btnWebgpu = document.getElementById("btn_webgpu");
+    const btnWebgl = document.getElementById("btn_webgl");
+    const errorBox = document.getElementById("error_box");
+
+    // Obsługa motywów w locie (postMessage z craft.lmk.one)
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data) return;
+      const theme = data.theme || (data.type === "set_theme" && data.value) || (data.action === "set_theme" && data.theme);
+      if (theme) applyTheme(theme);
+    });
+
+    function applyTheme(theme) {
+      document.documentElement.classList.remove("theme-light", "theme-sepia");
+      document.body.classList.remove("theme-light", "theme-sepia");
+      if (theme === "light" || theme === "jasny") {
+        document.documentElement.classList.add("theme-light");
+        document.body.classList.add("theme-light");
+      } else if (theme === "sepia") {
+        document.documentElement.classList.add("theme-sepia");
+        document.body.classList.add("theme-sepia");
+      }
+      try { localStorage.setItem("craft_theme", theme); } catch (_) {}
+    }
+
+    const currentParams = new URLSearchParams(window.location.search);
+    const isWebglMode = currentParams.has("webgl") || currentParams.get("backend") === "webgl2";
+    if (isWebglMode) {
+      if (btnWebgl) btnWebgl.classList.add("active");
+      if (btnWebgpu) btnWebgpu.classList.remove("active");
+    } else {
+      if (btnWebgpu) btnWebgpu.classList.add("active");
+      if (btnWebgl) btnWebgl.classList.remove("active");
+    }
+
+    function setStatus(text) {
+      if (statusEl) statusEl.textContent = text;
+    }
+
+    function setProgress(loaded, total) {
+      const pct = Math.min(100, Math.max(0, Math.round((loaded / total) * 100)));
+      if (progressBar) progressBar.style.width = pct + "%";
+      if (progressPct) progressPct.textContent = pct + "%";
+      const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
+      const totalMB = (total / (1024 * 1024)).toFixed(1);
+      if (progressBytes) progressBytes.textContent = `${loadedMB} MB / ${totalMB} MB`;
+    }
+
+    function showError(err) {
+      setStatus("Błąd uruchamiania EffectCraft");
+      if (errorBox) {
+        errorBox.style.display = "block";
+        errorBox.innerHTML = `<strong>Wystąpił problem:</strong>\n${(err && err.stack) || err}\n\n<a href="?webgl=1">Uruchom w trybie zgodności WebGL2</a> &bull; <a href="javascript:location.reload()">Odśwież stronę</a>`;
+      }
+    }
+
+    // Wielopoziomowy mostek CORS (CORS Proxy Fallback)
+    async function fetchWithCorsFallback(fileUrl) {
+      try {
+        const res = await fetch(fileUrl);
+        if (res.ok) return res;
+      } catch (directErr) {
+        if (/^https?:\/\//i.test(fileUrl)) {
+          console.info(`[EffectCraft] Bezpośredni odczyt ${fileUrl} zablokowany przez CORS, próba przez proxy portalu lmk.one...`);
+          try {
+            const proxyUrl = `https://lmk.one/api/cors?url=${encodeURIComponent(fileUrl)}`;
+            const res = await fetch(proxyUrl);
+            if (res.ok) return res;
+          } catch (_) {
+            console.info(`[EffectCraft] Proxy portalu niedostępne, fallback na corsproxy.io...`);
+            const fallbackProxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(fileUrl)}`;
+            return await fetch(fallbackProxyUrl);
+          }
+        }
+        throw directErr;
+      }
+      return await fetch(fileUrl);
+    }
+
+    // Automatyczne otwarcie pliku przekazanego w parametrze ?file= lub ?url=
+    async function loadRequestedFile() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("new") || params.has("empty")) return;
+      const fileUrl = params.get("file") || params.get("url");
+      if (!fileUrl) return;
+
+      const cleanUrl = fileUrl.split("?")[0].split("#")[0];
+      const rawName = cleanUrl.split("/").pop() || "project.ecproj";
+      const fileName = decodeURIComponent(rawName);
+
+      try {
+        setStatus(`Pobieranie pliku ${fileName}…`);
+        const res = await fetchWithCorsFallback(fileUrl);
+        if (!res.ok) {
+          console.warn(`[EffectCraft] Nie udało się pobrać pliku ${fileUrl}: ${res.status}`);
+          return;
+        }
+        const blob = await res.blob();
+        const file = new File([blob], fileName, { type: "application/octet-stream" });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+
+        const canvas = document.getElementById("effectcraft_canvas");
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const dropEvent = new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: dt,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2
+        });
+        canvas.dispatchEvent(dropEvent);
+        console.log(`[EffectCraft] Plik ${fileName} wczytany do edytora.`);
+      } catch (err) {
+        console.warn("[EffectCraft] Błąd pobierania pliku startowego:", err);
+      }
+    }
+
+    // The agent / test API
+    window.effectcraft = {
+      request: (method, params) => ec.request(method, params ?? {}),
+      execute: (command, params) => ec.request("engine.execute", { command, params: params ?? {} }),
+      commands: () => ec.request("engine.commands", {}),
+      inspect: () => ec.request("ui.inspect", {}),
+      screenshot: (params) => ec.request("ui.screenshot", params ?? {}),
+      renderFrame: (params) => ec.request("render.frame", { base64: true, ...(params ?? {}) }),
+      files: () => ec.files(),
+      readFile: (path) => ec.readFile(path),
+      addFile: async (fileOrUrl, name) => {
+        let bytes;
+        if (typeof fileOrUrl === "string") {
+          bytes = new Uint8Array(await (await fetch(fileOrUrl)).arrayBuffer());
+          name = name ?? fileOrUrl.split("/").pop();
+        } else {
+          bytes = new Uint8Array(await fileOrUrl.arrayBuffer());
+          name = name ?? fileOrUrl.name;
+        }
+        return ec.addFile(name, bytes);
+      },
+      info: () => ({
+        ...ec.info(),
+        crossOriginIsolated: self.crossOriginIsolated,
+        webgpu: !!navigator.gpu,
+        serviceWorker: (() => {
+          try {
+            return !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+          } catch {
+            return false;
+          }
+        })(),
+        load: window.effectcraftLoad,
+      }),
+      saveToBrowser: (path) => ec.saveToBrowser(path ?? undefined),
+      listStored: () => ec.listStored(),
+      removeStored: (path) => ec.removeStored(path),
+      flush: () => ec.flush(),
+      workerFrameCheck: (params) => ec.workerFrameCheck(params ?? {}).then(JSON.parse),
+    };
+
+    if (!new URLSearchParams(location.search).has("nosw")) {
+      try {
+        if ("serviceWorker" in navigator && navigator.serviceWorker) {
+          navigator.serviceWorker.register("sw.js").catch((e) => console.warn("service worker:", e));
+        }
+      } catch (e) {
+        console.warn("service worker:", e);
+      }
+    }
+
+    try {
+      setStatus("Pobieranie silnika EffectCraft WebAssembly…");
+      const wasmUrl = new URL("effectcraft_web_bg.wasm", location.href);
+      const response = await fetch(wasmUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} podczas pobierania modułu WebAssembly`);
+      }
+
+      const contentLength = response.headers.get("content-length");
+      const expectedBytes = contentLength ? parseInt(contentLength, 10) : 34000000;
+
+      let wasmBuffer;
+      if (response.body && typeof response.body.getReader === "function") {
+        const reader = response.body.getReader();
+        let loaded = 0;
+        const chunks = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          loaded += value.length;
+          setProgress(loaded, expectedBytes);
+        }
+        setStatus("Inicjalizacja i kompilacja modułu GPU…");
+        if (progressPct) progressPct.textContent = "100%";
+        if (progressBar) progressBar.style.width = "100%";
+
+        const fullBuffer = new Uint8Array(loaded);
+        let offset = 0;
+        for (const chunk of chunks) {
+          fullBuffer.set(chunk, offset);
+          offset += chunk.length;
+        }
+        wasmBuffer = fullBuffer;
+      } else {
+        wasmBuffer = await response.arrayBuffer();
+      }
+
+      setStatus("Kompilacja WebAssembly…");
+      const module = await WebAssembly.compile(wasmBuffer);
+      window.effectcraftModule = module;
+      await init({ module_or_path: module });
+      window.effectcraftLoad.wasmMs = performance.now() - t0;
+
+      setStatus("Startowanie aplikacji EffectCraft…");
+      await ec.start("effectcraft_canvas");
+      window.effectcraftLoad.readyMs = performance.now() - t0;
+
+      // Otwórz plik z ?file= lub ?url= po załadowaniu
+      setTimeout(loadRequestedFile, 150);
+    } catch (e) {
+      window.effectcraftLoad.error = String(e);
+      showError(e);
+      throw e;
+    }
+  </script>
+</body>
+</html>
