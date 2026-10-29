@@ -307,9 +307,30 @@
     window.addEventListener("message", (event) => {
       const data = event.data;
       if (!data) return;
-      const theme = data.theme || (data.type === "set_theme" && data.value) || (data.action === "set_theme" && data.theme);
+      const theme = data.theme || (data.type === "set_theme" && (data.theme || data.value)) || (data.action === "set_theme" && data.theme);
       if (theme) applyTheme(theme);
     });
+
+    function applyWasmTheme(theme) {
+      if (!theme) return;
+      try {
+        if (typeof ec.setTheme === "function") {
+          ec.setTheme(theme);
+        } else if (window.effectcraft && typeof window.effectcraft.execute === "function") {
+          const isSepia = theme === "sepia";
+          window.effectcraft.execute("prefs.set", {
+            values: {
+              "appearance.appearanceMode": "auto",
+              "appearance.brightness": isSepia ? -0.20 : 0.0
+            }
+          });
+        } else {
+          window._pendingWasmTheme = theme;
+        }
+      } catch (e) {
+        console.warn("[EffectCraft] Błąd zmiany motywu WASM:", e);
+      }
+    }
 
     function applyTheme(theme) {
       document.documentElement.classList.remove("theme-light", "theme-sepia");
@@ -322,6 +343,7 @@
         document.body.classList.add("theme-sepia");
       }
       try { localStorage.setItem("craft_theme", theme); } catch (_) {}
+      applyWasmTheme(theme);
     }
 
     const currentParams = new URLSearchParams(window.location.search);
@@ -421,6 +443,7 @@
 
     // The agent / test API
     window.effectcraft = {
+      setTheme: (theme) => applyWasmTheme(theme),
       request: (method, params) => ec.request(method, params ?? {}),
       execute: (command, params) => ec.request("engine.execute", { command, params: params ?? {} }),
       commands: () => ec.request("engine.commands", {}),
@@ -517,6 +540,12 @@
       setStatus("Startowanie aplikacji EffectCraft…");
       await ec.start("effectcraft_canvas");
       window.effectcraftLoad.readyMs = performance.now() - t0;
+
+      // Zastosuj motyw początkowy (z URL, localStorage lub postMessage)
+      const initialTheme = window._pendingWasmTheme || currentParams.get("theme") || localStorage.getItem("craft_theme");
+      if (initialTheme) {
+        applyWasmTheme(initialTheme);
+      }
 
       // Otwórz plik z ?file= lub ?url= po załadowaniu
       setTimeout(loadRequestedFile, 150);
